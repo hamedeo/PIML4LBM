@@ -1,54 +1,45 @@
 """
 benchmark_tgv.py
-Run a D2Q9 LBM simulation of a 2‑D Taylor‑Green vortex, replacing
-the standard BGK collision with a previously‑trained NaiveCollision NN.
+Run a D2Q9 LBM simulation of a 2‑D Taylor‑Green vortex, it replaces
+the standard BGK collision with a trained NaiveCollision NN.
 """
 
 import numpy as np
 import torch
 
 from model import NaiveCollision
-from train import load_model          # loads weights from .pt
-# ‑‑ if you want a pure‑BGK reference – import nothing extra!
+from train import load_model          # loads weights from .pt trained file
 
 ###############################################################################
-# 1.  Simulation parameters
+# 1.  Simulation parameters from the booklet
 ###############################################################################
-Lx, Ly   = 32, 32          # grid size  (matches the paper’s small test)
-tau      = 1.0             # relaxation time used in training (kept here)
-c_s2     = 1.0/3.0         # speed‑of‑sound squared in lattice units
-nu       = (tau - 0.5)*c_s2          # kinematic viscosity (Chapman‑Enskog)
+Lx, Ly   = 32, 32          # grid size
+tau      = 1               # relaxation time
+c_s2     = 1/3
+nu       = (tau - 0.5)*c_s2          # kinematic viscosity (Chapman‑Enskog fromulaion)
 n_steps  = 2500
-u0       = 1.0e-2          # initial velocity amplitude (well inside ML range)
-device   = 'cpu'           # change to 'cuda' if you trained+saved on GPU
-NN_PATH  = 'naive_model.pt'   # model you saved in main.py
+u0       = 1e-2            # initial velocity amplitude
+device   = 'cpu'           # 'cuda' if GPU trained data is available
+NN_PATH  = 'naive_model.pt'
 ###############################################################################
 
-# D2Q9 discrete velocities  (cx, cy) and weights
+# D2Q9 parameters
 c = np.array([[ 0,  0],
               [ 1,  0], [ 0,  1], [-1,  0], [ 0, -1],
               [ 1,  1], [-1,  1], [-1, -1], [ 1, -1]], dtype=np.int8)
-w = np.array([4/9, 1/9, 1/9, 1/9, 1/9,
+w = np.array([4/9, 
+              1/9, 1/9, 1/9, 1/9,
               1/36, 1/36, 1/36, 1/36], dtype=np.float64)
 
 # ------------------------------------------------------------------ helpers --
 def equilibrium(rho, ux, uy):
-    """
-    Compute Maxwell‑Boltzmann equilibrium (2nd‑order Hermite) for *vectorised*
-    rho, ux, uy arrays of shape (Ly, Lx).
-    Returns feq with shape (9, Ly, Lx).
-    """
-    cu = (c[:,0,None,None]*ux + c[:,1,None,None]*uy) / c_s2
-    uu = (ux**2 + uy**2) / (2*c_s2)
-    feq = w[:,None,None] * rho * (1. + cu + 0.5*cu**2 - uu)
-    return feq
+    feq = w[:,None,None] * rho * (1. + ((c[:,0,None,None]*ux + c[:,1,None,None]*uy) / c_s2)) + 0.5*cu**2 - ((ux**2 + uy**2) / (2*c_s2)))
+    return feq # shape (9, Ly, Lx)
 
-# roll (stream) populations on the lattice
 def stream(f):
-    # f has shape (9, Ly, Lx)
     for i,(cx,cy) in enumerate(c):
-        f[i] = np.roll(f[i], shift=cx, axis=1)   # x‑direction
-        f[i] = np.roll(f[i], shift=cy, axis=0)   # y‑direction
+        f[i] = np.roll(f[i], shift=cx, axis=1)
+        f[i] = np.roll(f[i], shift=cy, axis=0)
 
 # ---------------------------------------------------------------- initialise --
 x = np.arange(Lx);  y = np.arange(Ly)

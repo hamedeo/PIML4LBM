@@ -1,27 +1,59 @@
 # PIML4LBM
-Machine Learning LBM Simulation
+**Physics-Informed Machine Learning for LBM Simulation**
 
-The assignmnet is to develope a machine learning approach for 2DQ9 LBM method using four of the following approches and validate them using Taylor-Green Vortex test and cavity lid driven test.
+This project aims to develop a machine learning approach for the 2D-Q9 Lattice Boltzmann Method (LBM) using four different modeling strategies. The models are validated using the **Taylor-Green Vortex** and **lid-driven cavity** tests.
 
-  (1) Naive BGK model
+---
+
+## 🔧 Methods Implemented
+
+1. **Naive BGK model**  
+2. **Symmetric lattice fetching**  
+3. **Mass & momentum conservation**  
+4. **Combined symmetry and conservation**
+
+---
+
+## 🧠 Approach Overview
+
+The pipeline consists of the following steps:
+
+1. **Data generation**  
+2. **Collision operator construction**  
+3. **Dataset building**  
+4. **Model training and validation**
+
+Each model version reflects a different level of physical constraint:
+
+---
+
+### 1. **Naive Method**
+- Enforces only **mass conservation** (continuity equation).
+- Computationally expensive and **does not guarantee physical constraints**.
   
-  (2) Symmetric lattice fetching
+### 2. **Symmetric Condition**
+- Enforces **D8 symmetry** by averaging over group operations to ensure `φ_NN` is equivariant.
+- **Fails to conserve mass & momentum** (violates Postulate 3).
+
+### 3. **Mass and Momentum Conservation**
+- Enforces conservation in **x and y directions**.
+- **Fails to ensure equivariance** (violates Postulate 2).
   
-  (3) Mass & momentum conservation
-  
-  (4) Combined symmetry and conservation
+  - **3.1**: Algebraic Reconstruction (biased for rows 2, 5, 8)  
+  - **3.2**: Symmetric Algebraic Reconstruction using group averaging  
+  - **3.3**: Soft constraint in the loss function to penalize mass and momentum mismatches
 
+### 4. **Combined Symmetry + Conservation**
+- Satisfies **all 4 physical postulates**.
+- Reduces degrees of freedom from 90 → **18** for D2Q9, improving efficiency.
 
+---
 
+## 🧪 Tests
+- **Taylor-Green Vortex** for flow validation  
+- **Lid-driven cavity** to assess physical accuracy
 
-# The method:
+---
 
-     Steps: 1.Data generation 2.Collision Constructor 3. Dataset Building 4. \n
-     A function for use to generate data and validate it in four steps \n
-     (1) Naive Method -> just satisfy masss conservation continiuity eq. [This model is computationaly expensive and doesn't guarantee physical constraints]\n
-     (2) Satisfying symmetric condition byenforcing \\phi_NN be equivarience in respect to D_8 using group averaging [This method doesn't satisfy Postulate 3 mass & moment invarient cond.]\n
-     (3) Conservation of both Mass and Monmentum in x and y dir in which we need to use Algebraic fix: [This method does't satisfy Postulate 2 equivariance cond.]\n
-     (3.1) Algebraic Reconstruction (Biased for rows 2, 5, & 8). Why?\n
-     (3.2) Symmetric Algebraic Reconstruction with group-averaging method\n
-     (3.3) Penalize mass and momentum mismatches with a soft constraint in the loss function
-     Combined Symmetric-Conservation to satisfy all 4 Postulates at once and be computationally efficient by reducing degrees of freedom for D2Q9 from 90 down to 18
+Feel free to clone, explore, and adapt the models for more complex LBM simulations or different lattice types.
+

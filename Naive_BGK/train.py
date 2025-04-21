@@ -10,7 +10,6 @@ def train_naive(f_pre, f_post,
                 epochs=200, batch_size=32, lr=1e-3,
                 hidden_size=50, device='cpu'):
     """
-    f_pre, f_post: NumPy arrays, shape (N, 9).
     Returns a trained NaiveCollision model.
     """
     X = torch.from_numpy(f_pre).float().to(device)
@@ -54,19 +53,12 @@ def evaluate_model(model, f_pre_test, f_post_test, device='cpu'): # Should we do
     return mse_test
 
 
-def save_model(model, filename='naive_model.pt'):
-    """
-    Save trained model weights for future reuse.
-    """
+def save_model(model, filename='naive_model.pt'): # Save trained model weights for future reuse.
     torch.save(model.state_dict(), filename)
     print(f"Model saved to {filename}")
 
 
-def load_model(model_class, filename='naive_model.pt', hidden_size=50, device='cpu'):
-    """
-    Load model weights from disk. For example:
-      model = load_model(NaiveCollision, 'naive_model.pt')
-    """
+def load_model(model_class, filename='naive_model.pt', hidden_size=50, device='cpu'): # Load model weights from disk. 
     model = model_class(hidden_size=hidden_size).to(device)
     model.load_state_dict(torch.load(filename, map_location=device))
     model.eval()

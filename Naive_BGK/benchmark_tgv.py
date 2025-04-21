@@ -6,13 +6,12 @@ the standard BGK collision with a trained NaiveCollision NN.
 
 import numpy as np
 import torch
+import sys
 
 from model import NaiveCollision
 from train import load_model          # loads weights from .pt trained file
 
-###############################################################################
-# 1.  Simulation parameters from the booklet
-###############################################################################
+# Simulation parameters from the booklet
 Lx, Ly   = 32, 32          # grid size
 tau      = 1               # relaxation time
 c_s2     = 1/3
@@ -21,7 +20,6 @@ n_steps  = 2500
 u0       = 1e-2            # initial velocity amplitude
 device   = 'cpu'           # 'cuda' if GPU trained data is available
 NN_PATH  = 'naive_model.pt'
-###############################################################################
 
 # D2Q9 parameters
 c = np.array([[ 0,  0],
@@ -31,17 +29,17 @@ w = np.array([4/9,
               1/9, 1/9, 1/9, 1/9,
               1/36, 1/36, 1/36, 1/36], dtype=np.float64)
 
-# ------------------------------------------------------------------ helpers --
+# ------ Functions
 def equilibrium(rho, ux, uy):
-    feq = w[:,None,None] * rho * (1. + ((c[:,0,None,None]*ux + c[:,1,None,None]*uy) / c_s2)) + 0.5*cu**2 - ((ux**2 + uy**2) / (2*c_s2)))
+    feq = w[:,None,None] * rho * (1. + ((c[:,0,None,None]*ux + c[:,1,None,None]*uy) / c_s2)) + 0.5*(c[:,0,None,None]*ux + c[:,1,None,None]*uy) **2 - ((ux**2 + uy**2) / (2*c_s2))
     return feq # shape (9, Ly, Lx)
 
-def stream(f):
+def stream(f):             # f.shape = (9, Ly, Lx)
     for i,(cx,cy) in enumerate(c):
         f[i] = np.roll(f[i], shift=cx, axis=1)
         f[i] = np.roll(f[i], shift=cy, axis=0)
 
-# ---------------------------------------------------------------- initialise --
+# ------ Initialise the simulation
 x = np.arange(Lx);  y = np.arange(Ly)
 X, Y = np.meshgrid(x, y, indexing='xy')
 
@@ -49,58 +47,52 @@ ux =  u0 * np.cos(2.0*np.pi*X/Lx) * np.sin(2.0*np.pi*Y/Ly)
 uy = -u0 * np.cos(2.0*np.pi*Y/Ly) * np.sin(2.0*np.pi*X/Lx)
 rho = np.ones_like(ux)
 
-f = equilibrium(rho, ux, uy)              # start from equilibrium
+f = equilibrium(rho, ux, uy) # == f_eq => shape.f = (9, Ly, Lx)
 
-# ---------------------------------------------------------------- load model --
+# ------ Load the trained model
 model = load_model(NaiveCollision, NN_PATH, hidden_size=50, device=device)
 
-# we’ll feed the NN batched‑across‑all‑nodes for speed
-def collide_nn(f_pre):
-    """
-    f_pre : np array shape (9, Ly, Lx)
-    Returns f_post with same shape, using the neural network.
-    """
-    flat = f_pre.reshape(9, -1).T          # shape (Ncells, 9)
+def collide_nn(f_pre):              # shape.f_pre (9, Ly, Lx)
+    ### for debugging purposes ###########
+    # print(f"f_pre shape: {f_pre.shape}")
+    # sys.exit()
+    ######################################
+    # (9, Ly, Lx) –– reshape/T ––> (Ly*Lx, 9) –– model ––> (Ly*Lx,9) –– reshape/T ––> (9, Ly, Lx)
+    flat = f_pre.reshape(9, -1).T   # flattened to comply with .pt trained data shape.f_pre = (N_samples,9) = (Lx*Ly, 9)
     with torch.no_grad():
         out = model(torch.from_numpy(flat).float().to(device))
     return out.cpu().numpy().T.reshape(9, Ly, Lx)
 
-def collide_bgk(f_pre, rho, ux, uy):
-    """
-    Classical BGK collision: f_post = f_pre - (1/tau)*(f_pre - f_eq)
-    """
-    # compute the same equilibrium you use elsewhere
+def collide_bgk(f_pre, rho, ux, uy): # f_post = f_pre - (1/tau)*(f_pre - f_eq)
     feq = equilibrium(rho, ux, uy)
     return f_pre - (1.0 / tau) * (f_pre - feq)
 
-# ---------------------------------------------------------------- simulation --
+# ------ Taylor–Green Vortex Simulation
 avg_u           = []        # store ⟨|u|⟩ vs. time
-analytic_decay  = []        # the exact ⟨|u|⟩ for comparison
+analytic_decay  = []        # the exact ⟨|u|⟩ decay
 
 for t in range(n_steps):
     # 1) streaming
     stream(f)
 
-    # 2) compute pre‐collision macros (only needed for collision)
+    # 2) compute pre‐collision macros
     rho  = np.sum(f, axis=0)
     ux_p = np.sum(f * c[:,0,None,None], axis=0) / rho
     uy_p = np.sum(f * c[:,1,None,None], axis=0) / rho
 
-    # 3) collide (pick either BGK or NN)
-    f_post_bgk = collide_bgk(f, rho, ux_p, uy_p)
+    # 3) collide (both BGK or NN)
+    # f_post_bgk = collide_bgk(f, rho, ux_p, uy_p)
     f_post_nn  = collide_nn(f)
 
-    max_bgk = np.max(np.abs(f_post_bgk - f))
+    # max_bgk = np.max(np.abs(f_post_bgk - f))
     max_nn   = np.max(np.abs(f_post_nn  - f))
-    print(f"step {t+1:4d}: max |Δf| BGK = {max_bgk:.3e}, NN = {max_nn:.3e}")
+    # print(f"step {t+1:4d}: max |Δf| BGK = {max_bgk:.3e}")
+    print(f"step {t+1:4d}: rho: {rho}, ux: {ux}, uy: {uy}, max |Δf| NN = {max_nn:.3e}")
 
-    # 3a) for pure‐NN run, uncomment:
-    f[:] = f_post_nn
+    f[:] = f_post_nn # for pure‐NN run
+    # f[:] = f_post_bgk # for pure‐BGK run
 
-    # or 3b) for pure‐BGK run, uncomment:
-    # f[:] = f_post_bgk
-
-    # 4) NOW recompute macroscopic fields on f_post
+    # 4) recompute macros on f_post
     rho  = np.sum(f, axis=0)
     ux   = np.sum(f * c[:,0,None,None], axis=0) / rho
     uy   = np.sum(f * c[:,1,None,None], axis=0) / rho
@@ -109,11 +101,11 @@ for t in range(n_steps):
     u_mag = np.sqrt(ux**2 + uy**2)
     avg_u.append(np.mean(u_mag))
 
-    # 6) analytic Taylor‑Green decay (fixed formula!)
+    # 6) analytic Taylor‑Green Vortex decay
     k = 2.0 * np.pi / Lx
-    analytic_decay.append((u0/np.sqrt(2)) * np.exp(-nu * k*k * t))
+    analytic_decay.append((u0/np.sqrt(2)) * np.exp(-2.0 * nu * k*k * t))
 
-    # optional debug on f‐changes
+    # Heartbeat
     if (t+1) % 250 == 0:
         print(f"step {t+1:4d}:  ⟨|u|⟩ = {avg_u[-1]:.3e}, exact = {analytic_decay[-1]:.3e}")
 
@@ -127,11 +119,74 @@ for k in range(-10,0):
 # ----------------------------------------------------------------- plots ----
 import matplotlib.pyplot as plt
 
-plt.semilogy(avg_u,          label='NN collision')
-plt.semilogy(analytic_decay, '--',    label='analytic')
+plt.semilogy(avg_u,          label='NN Naive')
+plt.semilogy(analytic_decay, '--',    label='Analytic')
 plt.xlabel('time step')
 plt.ylabel(r'$\langle |u|\rangle$')
 plt.legend()
 plt.tight_layout()
+plt.savefig('taylor_green_vortex_decay.png', dpi=300)
 plt.show()
 
+
+#########################################################################
+# Hamedeo
+#########################################################################
+"""
+# =========================================================================== #
+#                              FIELD PLOT SECTION                             #
+# =========================================================================== #
+### choose a snapshot within the simulated range #############################
+snapshot_step = 1000                    # pick any 0 ≤ t < n_steps
+##############################################################################
+
+print(f"\nCreating field plot at t = {snapshot_step}")
+
+# ---------------------------------------------------------------------------
+# 2.  Build analytic TG field at the same t
+k    = 2.0 * np.pi / Lx
+dec  = np.exp(-nu * k*k * snapshot_step)
+ux_an =  u0*np.cos(k*X)*np.sin(k*Y) * dec
+uy_an = -u0*np.cos(k*Y)*np.sin(k*X) * dec
+mag_an = np.sqrt(ux_an**2 + uy_an**2)
+
+# ---------------------------------------------------------------------------
+# 3.  Extract Naive NN field saved in variables ux, uy at snapshot_step
+#     (ux, uy were updated in the last loop iteration, so they already
+#      correspond to t = n_steps - 1.  If snapshot_step < n_steps-1 we need
+#      to re‑run the solver quickly up to that step; easiest is to store
+#      ux_list during the main loop.  Here we assume snapshot_step == n_steps-1
+#      OR you set n_steps = snapshot_step before running.)
+if snapshot_step != n_steps-1:
+    print("WARNING: snapshot_step differs from last simulated step; "
+          "field shown is t = n_steps-1")
+
+mag_nn = np.sqrt(ux**2 + uy**2)
+
+# ---------------------------------------------------------------------------
+# 4.  Helper to add a panel with subsampled stream‑lines
+def add_panel(ax, mag, ux_field, uy_field, title):
+    im = ax.imshow(mag, cmap='viridis', origin='lower')
+    step = 2                           # streamline every 2 lattice nodes
+    xs   = np.arange(0, Lx, step)
+    ys   = np.arange(0, Ly, step)
+    u_ss = ux_field[::step, ::step].T  # shape (Ny, Nx)
+    v_ss = uy_field[::step, ::step].T
+    ax.streamplot(xs, ys, u_ss, v_ss,
+                  color='w', density=1.2, linewidth=0.6)
+    ax.set_xticks([]); ax.set_yticks([])
+    ax.set_title(title, fontsize=10)
+    plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04, label=r'$|u|$')
+
+# ---------------------------------------------------------------------------
+# 5.  Build and save the figure
+fig = plt.figure(figsize=(7,3))
+add_panel(plt.subplot(1,2,1), mag_nn, ux, uy,   'NN Naive')
+add_panel(plt.subplot(1,2,2), mag_an, ux_an, uy_an, 'Analytic')
+
+plt.suptitle(f'Taylor–Green vortex – t = {snapshot_step}', y=1.02)
+plt.tight_layout()
+plt.savefig('velocity_field_naive_vs_analytic.png', dpi=300)
+plt.show()
+print("Saved  velocity_field_naive_vs_analytic.png")
+"""

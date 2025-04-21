@@ -63,14 +63,12 @@ def generate_training_data_bgk(
     return f_pre_array, f_post_array
 
 
-def save_data(filename, f_pre, f_post):
-    """Save data as a .npz file for easy reload."""
+def save_data(filename, f_pre, f_post): #  Save data as a .npz file for easy reload.
     np.savez_compressed(filename, f_pre=f_pre, f_post=f_post)
     print(f"Saved data to {filename}")
 
 
-def load_data(filename):
-    """Load the .npz file containing f_pre, f_post."""
+def load_data(filename): # Load the .npz file containing f_pre, f_post.
     data = np.load(filename)
     return data['f_pre'], data['f_post']
 

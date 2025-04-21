@@ -86,8 +86,8 @@ for t in range(n_steps):
 
     # max_bgk = np.max(np.abs(f_post_bgk - f))
     max_nn   = np.max(np.abs(f_post_nn  - f))
-    # print(f"step {t+1:4d}: max |Δf| BGK = {max_bgk:.3e}")
-    print(f"step {t+1:4d}: rho: {rho}, ux: {ux}, uy: {uy}, max |Δf| NN = {max_nn:.3e}")
+    # print(f"step {t+1:4d}: rho: {rho}, ux: {ux}, uy: {uy}, max |Δf| BGK = {max_bgk:.3e}")
+    print(f"step {t+1:4d}: max |Δf| NN = {max_nn:.3e}")
 
     f[:] = f_post_nn # for pure‐NN run
     # f[:] = f_post_bgk # for pure‐BGK run
@@ -109,6 +109,12 @@ for t in range(n_steps):
     if (t+1) % 250 == 0:
         print(f"step {t+1:4d}:  ⟨|u|⟩ = {avg_u[-1]:.3e}, exact = {analytic_decay[-1]:.3e}")
 
+    # Save mag_nn, ux, and uy at the 1000th step for later use
+    if t == 999:
+        ux_1000 = ux.copy()
+        uy_1000 = uy.copy()
+        print("Saved ux, and uy at step 1000 for later use.")
+
 # ---------------------------------------------------------------- results ----
 print("\nFinished!")
 print(f"Initial ⟨|u|⟩: {avg_u[0]:.3e}")
@@ -128,11 +134,6 @@ plt.tight_layout()
 plt.savefig('taylor_green_vortex_decay.png', dpi=300)
 plt.show()
 
-
-#########################################################################
-# Hamedeo
-#########################################################################
-"""
 # =========================================================================== #
 #                              FIELD PLOT SECTION                             #
 # =========================================================================== #
@@ -145,48 +146,72 @@ print(f"\nCreating field plot at t = {snapshot_step}")
 # ---------------------------------------------------------------------------
 # 2.  Build analytic TG field at the same t
 k    = 2.0 * np.pi / Lx
-dec  = np.exp(-nu * k*k * snapshot_step)
+dec  = np.exp(-2 * nu * k*k * snapshot_step)
 ux_an =  u0*np.cos(k*X)*np.sin(k*Y) * dec
 uy_an = -u0*np.cos(k*Y)*np.sin(k*X) * dec
 mag_an = np.sqrt(ux_an**2 + uy_an**2)
 
 # ---------------------------------------------------------------------------
 # 3.  Extract Naive NN field saved in variables ux, uy at snapshot_step
-#     (ux, uy were updated in the last loop iteration, so they already
-#      correspond to t = n_steps - 1.  If snapshot_step < n_steps-1 we need
-#      to re‑run the solver quickly up to that step; easiest is to store
-#      ux_list during the main loop.  Here we assume snapshot_step == n_steps-1
-#      OR you set n_steps = snapshot_step before running.)
-if snapshot_step != n_steps-1:
-    print("WARNING: snapshot_step differs from last simulated step; "
-          "field shown is t = n_steps-1")
 
-mag_nn = np.sqrt(ux**2 + uy**2)
+mag_nn = np.sqrt(ux_1000**2 + uy_1000**2)
 
 # ---------------------------------------------------------------------------
 # 4.  Helper to add a panel with subsampled stream‑lines
-def add_panel(ax, mag, ux_field, uy_field, title):
-    im = ax.imshow(mag, cmap='viridis', origin='lower')
-    step = 2                           # streamline every 2 lattice nodes
-    xs   = np.arange(0, Lx, step)
-    ys   = np.arange(0, Ly, step)
-    u_ss = ux_field[::step, ::step].T  # shape (Ny, Nx)
-    v_ss = uy_field[::step, ::step].T
+def add_panel(ax, mag, ux_field, uy_field, title,
+              flip=False, vmin=0.0, vmax=None):
+    im = ax.imshow(mag,
+                   cmap='viridis',
+                   origin='lower',
+                   extent=[0,2*np.pi,0,2*np.pi],
+                   vmin=vmin,
+                   vmax=(vmax if vmax is not None else mag.max()))
+
+    # 2) build physical coordinate vectors for streamplot
+    xs_full = np.linspace(0, 2*np.pi, Lx)
+    ys_full = np.linspace(0, 2*np.pi, Ly)
+
+    step = 1
+    xs = xs_full[::step]   # length = Lx//step
+    ys = ys_full[::step]   # length = Ly//step
+
+    # 3) sub‐sample your velocity field but do NOT transpose
+    u_ss = ux_field[::step, ::step]  # shape (Ly/step, Lx/step)
+    v_ss = uy_field[::step, ::step]
+
+    # 4) overlay streamlines in the correct direction
     ax.streamplot(xs, ys, u_ss, v_ss,
-                  color='w', density=1.2, linewidth=0.6)
-    ax.set_xticks([]); ax.set_yticks([])
+                  color='white',
+                  density=0.5,
+                  linewidth=1,
+                  arrowstyle='->',
+                  arrowsize=1.0)
+
+    ax.set_aspect('equal')       # square axes in physical units
+    ax.set_xticks([0, np.pi, 2*np.pi])
+    ax.set_xticklabels(['0', 'π', '2π'])
+    ax.set_yticks([0, np.pi, 2*np.pi])
+    ax.set_yticklabels(['0', 'π', '2π'])
     ax.set_title(title, fontsize=10)
-    plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04, label=r'$|u|$')
+    plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04,
+                 label=r'$|u|$')
 
 # ---------------------------------------------------------------------------
 # 5.  Build and save the figure
 fig = plt.figure(figsize=(7,3))
-add_panel(plt.subplot(1,2,1), mag_nn, ux, uy,   'NN Naive')
-add_panel(plt.subplot(1,2,2), mag_an, ux_an, uy_an, 'Analytic')
+add_panel(plt.subplot(1,2,1),
+          mag_nn, ux_1000, uy_1000,
+          'NN Naive',
+          flip=False,
+          vmin=4.8e-3,
+          vmax=4.9e-3)
+
+add_panel(plt.subplot(1,2,2),
+          mag_an, ux_an, uy_an,
+          'Analytic')
 
 plt.suptitle(f'Taylor–Green vortex – t = {snapshot_step}', y=1.02)
 plt.tight_layout()
 plt.savefig('velocity_field_naive_vs_analytic.png', dpi=300)
 plt.show()
 print("Saved  velocity_field_naive_vs_analytic.png")
-"""

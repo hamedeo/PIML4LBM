@@ -1,0 +1,29 @@
+(mlenv) deo@deo-virtual-machine:~/Programms/MLBM/Naive_BGK$ python main.py
+[main_naive] Generating training data ...
+Saved data to saved_data/my_bgk_data.npz
+Saved data to saved_data/my_bgk_test_data.npz
+[main_naive] Start training ...
+[train_naive] Epoch 10/200, Loss=0.000056
+[train_naive] Epoch 20/200, Loss=0.000053
+[train_naive] Epoch 30/200, Loss=0.000052
+[train_naive] Epoch 40/200, Loss=0.000051
+[train_naive] Epoch 50/200, Loss=0.000051
+[train_naive] Epoch 60/200, Loss=0.000051
+[train_naive] Epoch 70/200, Loss=0.000050
+[train_naive] Epoch 80/200, Loss=0.000050
+[train_naive] Epoch 90/200, Loss=0.000050
+[train_naive] Epoch 100/200, Loss=0.000049
+[train_naive] Epoch 110/200, Loss=0.000049
+[train_naive] Epoch 120/200, Loss=0.000049
+[train_naive] Epoch 130/200, Loss=0.000049
+[train_naive] Epoch 140/200, Loss=0.000049
+[train_naive] Epoch 150/200, Loss=0.000049
+[train_naive] Epoch 160/200, Loss=0.000049
+[train_naive] Epoch 170/200, Loss=0.000049
+[train_naive] Epoch 180/200, Loss=0.000049
+[train_naive] Epoch 190/200, Loss=0.000049
+[train_naive] Epoch 200/200, Loss=0.000049
+[main_naive] Test MSE = 2.387733e-07
+Model saved to naive_model.pt
+[main_naive] Loading previously saved data and model to do a quick check.
+[load_and_evaluate_model] MSE on test data = 2.387733e-07
